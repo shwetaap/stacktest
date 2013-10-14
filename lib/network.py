@@ -1,5 +1,5 @@
 import requests
-import token
+import stacktoken
 import os
 import ConfigParser
 import json
@@ -15,11 +15,15 @@ class Network():
 	self.config = ConfigParser.ConfigParser()
         self.conf_file = os.path.join(self.CONFIG_DIR, self.CONFIG_FILE)
         self.config.read(self.conf_file)
-        self.req_token = token.Token()
+        self.req_token = stacktoken.Token()
         self.token_id = self.req_token.create_token()
         self.req_headers = {'content-type': 'application/json'}
         self.req_headers.update({'X-Auth-Token': self.token_id})
         self.network_name = "net10"
+        self.floating_network = "nova"
+        self.floating_ip = self.config.get('EXTERNAL_NETWORK', 'FLOATING_IP')
+        self.floating_ip_pool_start = self.config.get('EXTERNAL_NETWORK', 'FLOATING_IP_POOL_START')
+        self.floating_ip_pool_end = self.config.get('EXTERNAL_NETWORK', 'FLOATING_IP_POOL_END')
         self.network_url = ''.join([self.config.get('AUTHENTICATION', 'URL'), self.NETWORK_PORT, self.NETWORK_API_VERSION, '/networks'])
         self.subnet = "10.10.10.0/24"
         self.subnet_url = ''.join([self.config.get('AUTHENTICATION', 'URL'), self.NETWORK_PORT, self.NETWORK_API_VERSION, '/subnets'])
@@ -56,9 +60,12 @@ class Network():
 	    subnet = self.subnet		
 	
 	if pool_start and pool_end:
-	    req_data = '{"subnet": {"network_id": "' + network_id + '", "ip_version": 4, "cidr": "' + subnet + '", "allocation_pools":[{"start": "' + pool_start + '", ""end": "' + pool_end + '"}]}}'
+	    req_data = '{"subnet": {"network_id": "' + network_id + '", "ip_version": 4, "cidr": "' + subnet + '", "allocation_pools":[{"start": "' + pool_start + '", "end": "' + pool_end + '"}]}}'
 	else:
 	    req_data = '{"subnet": {"network_id": "' + network_id + '", "ip_version": 4, "cidr": "' + subnet + '"}}'
+        
+        print "re_data"
+        print req_data
 
 	subnet_resp = requests.post(self.subnet_url, data=req_data, headers=self.req_headers)
 	subnet_resp_data = json.loads(subnet_resp.text)
@@ -72,8 +79,9 @@ class Network():
         req_data = '{"router": {"name": "' + router_name + '"}}'
 
         router_resp = requests.post(self.router_url, data=req_data , headers=self.req_headers)
-
+        print router_resp.status_code
         router_resp_data = json.loads(router_resp.text)
+        print router_resp_data
 
         return router_resp_data
     
@@ -91,7 +99,7 @@ class Network():
 	    router_data = self.create_router(router_name)
 	    router_id = router_data['router']['id']
 
-	if network is None:
+	if network_name is None:
 	    network_name = self.network_name
 
 	if subnet is None:
@@ -115,7 +123,7 @@ class Network():
         pass
 
     """ Add Gateway Interface """
-    def add_gateway_interface(self, network_name, router_name=None):
+    def add_gateway_interface(self, network_name=None, subnet=None, subnet_pool_start=None, subnet_pool_end=None, router_name=None):
 	if router_name is None:
 	    router_name = self.router_name
 
@@ -125,11 +133,24 @@ class Network():
             router_data = self.create_router(router_name)
             router_id = router_data['router']['id']
 
+        if network_name is None:
+            network_name = self.floating_network
+       
         network_id = self.get_network_id(network_name)
 
         if network_id is None:
+            if subnet is None:
+                subnet = self.floating_ip
+        
+            if subnet_pool_start is None:
+                subnet_pool_start = self.floating_ip_pool_start
+
+            if subnet_pool_end is None:
+                subnet_pool_end = self.floating_ip_pool_end
+
             net_data = self.create_network(network_name=network_name, public_net=True)
             network_id = net_data['network']['id']
+            subnet_data = self.create_subnet(network_name=network_name, subnet=subnet, pool_start=subnet_pool_start, pool_end=subnet_pool_end)
 
 	gateway_interface_url = ''.join([self.config.get('AUTHENTICATION', 'URL'), self.NETWORK_PORT, self.NETWORK_API_VERSION, '/routers/', router_id])
 	req_data = '{"router": {"external_gateway_info": {"network_id": "' + network_id + '"}}}'
@@ -138,6 +159,25 @@ class Network():
 	gateway_interface_data = json.loads(gateway_interface_resp.text)
 	return gateway_interface_data
 
+    def check_router_gateway_exists(self, router_id):
+	gateway_interface_url = ''.join([self.config.get('AUTHENTICATION', 'URL'), self.NETWORK_PORT, self.NETWORK_API_VERSION, '/routers/', router_id])        
+        gateway_interface_resp = requests.get(gateway_interface_url, headers=self.req_headers)
+	gateway_interface_data = json.loads(gateway_interface_resp.text)
+
+#        print gateway_interface_data['router']['external_gateway_info']
+        if gateway_interface_data['router']['external_gateway_info'] is not None:
+            return True
+        else:
+            return False
+
+
+    def associate_floating_ip(self, port_id, network_id):
+        
+        floating_ip_url = ''.join([self.config.get('AUTHENTICATION', 'URL'), self.NETWORK_PORT, self.NETWORK_API_VERSION, '/floatingips'])
+	req_data = '{"floatingip": {"floating_network_id": "' + network_id + '", "port_id": "' + port_id + '"}}'
+	floating_ip_resp = requests.post(floating_ip_url, data=req_data, headers=self.req_headers)
+	floating_ip_data = json.loads(floating_ip_resp.text)
+	return floating_ip_data	
 
     def get_network_id(self, network_name):
         
@@ -185,23 +225,70 @@ class Network():
                     router_id = router['id']
                     break
         return router_id
+
+    def get_port_id(self, device_id, server_ip):
+        
+        port_url = ''.join([self.config.get('AUTHENTICATION', 'URL'), self.NETWORK_PORT, self.NETWORK_API_VERSION, '/ports'])
+        port_resp = requests.get(port_url, headers=self.req_headers)
+        port_resp_data = json.loads(port_resp.text)
+
+	port_list = port_resp_data['ports']
+
+	port_id = None
+
+        if device_id and server_ip is not None:
+            for port in port_list:
+                if port['device_id'] == device_id:
+                    ip_list = port['fixed_ips']
+                    for ip in ip_list:
+                        if ip['ip_address'] == server_ip:
+                            port_id = port['id']
+                            break
+                if port_id is not None:
+                    break
+
+        print port_id
+        return port_id
+"""              
+        if server_ip is not None:
+            for port in port_list:
+                ip_list = port['fixed_ips']
+                print ip_list
+                for ip in ip_list:
+                    if ip['ip_address'] == server_ip:
+                        port_id = port['id']
+                        break
+                if port_id is not None:
+                    break
 """
-#if __name__ == '__main__':
-#    network = Network()
-    #print "Netoerk Token ID"
+        
+
+
+if __name__ == '__main__':
+    network = Network()
+#    print network.check_router_gateway_exists("8ed40600-ebb4-438d-b793-e0015762991b")
+    network.get_port_id("62a3b517-592b-4148-b40f-e60fba52d9ae", "10.10.10.1")
+"""    #print "Netoerk Token ID"
     #print network.token_id
 #    print network.create_network(network_name="net11", public_net=True)
+#    network.create_network(network_name="nova", public_net=True)
+#    network.create_subnet(network_name="nova", subnet="172.29.86.240/28", public_net=True, pool_start="172.29.86.244", pool_end="172.29.86.254")
+#    network.add_gateway_interface(network_name="nova", router_name="router1")
+#    netid = network.get_network_id("nova")
+#    portid = network.get_port_id("10.10.10.2")
+#    network.associate_floating_ip(portid, netid)
+#    print netid, portid
 #    print network.create_subnet(network_name="net14", subnet="10.10.14.0/24")	
 #    print network.create_router(router_name="router2")
 #    print network.add_interface_router(router_name="router2", network_name="net14", subnet="10.10.14.0/24")
 #    print network.network_url, network.req_data, network.response_data
-    print token.config.options('AUTHENTICATION')
-    print token.config.get('AUTHENTICATION', 'URL')
-    token.create_token()
-    print token.auth_url, token.admin_tenant_name, token.admin_username, token.admin_password, token.response_data, token.token
-"""
 
-"""
+#    print token.config.options('AUTHENTICATION')
+#    print token.config.get('AUTHENTICATION', 'URL')
+    print network.token_id
+    #print token.auth_url, token.admin_tenant_name, token.admin_username, token.admin_password, token.response_data, token.token
+
+
 Create a token
 Create network
 Create subnet

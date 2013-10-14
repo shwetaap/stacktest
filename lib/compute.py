@@ -1,5 +1,5 @@
 import requests
-import token
+import stacktoken
 import os
 import ConfigParser
 import json
@@ -19,7 +19,7 @@ class Compute():
         self.config = ConfigParser.ConfigParser()
         self.conf_file = os.path.join(self.CONFIG_DIR, self.CONFIG_FILE)
         self.config.read(self.conf_file)
-        self.req_token = token.Token()
+        self.req_token = stacktoken.Token()
         self.token_id = self.req_token.create_token()
         self.req_headers = {'content-type': 'application/json'}
         self.req_headers.update({'X-Auth-Token': self.token_id})
@@ -32,7 +32,7 @@ class Compute():
         self.imgobj = image.Image()
         self.identity_url = ''.join([self.config.get('AUTHENTICATION', 'URL'), self.IDENTITY_PORT, self.IDENTITY_API_VERSION, '/tenants'])
 
-    def create_server(self, server_name, tenant_name=None, network_name=None, image_name=None, flavor_id=None):
+    def create_server(self, server_name, tenant_name=None, network_name=None, subnet=None, image_name=None, flavor_id=None):
 
         if tenant_name is None:
             tenant_name = self.tenant_name
@@ -51,6 +51,7 @@ class Compute():
         if netid is None:
             new_net = self.netobj.create_network(network_name=network_name)
             netid = new_net['network']['id']
+            self.netobj.create_subnet(network_name=network_name, subnet=subnet)
 
         # Get Image Id
         image_id = self.imgobj.get_image_id(image_name)
@@ -65,6 +66,7 @@ class Compute():
 
         response = requests.post(server_create_url, data=req_data, headers=self.req_headers)
         response_data = json.loads(response.text)
+	print response_data
         return response_data
 
     def get_tenant_id(self, tenant_name):
@@ -83,4 +85,57 @@ class Compute():
 
         return tenant_id
 
+    def get_server_id(self, server_name, tenant_id):
     
+        server_get_url = ''.join([self.server_url, tenant_id, '/servers'])
+        server_resp = requests.get(server_get_url, headers=self.req_headers)
+        server_resp_data = json.loads(server_resp.text)
+        server_list = server_resp_data['servers']
+
+        server_id = None
+
+        if server_name is not None:
+            for server in server_list:
+                if server['name'] == server_name:
+                    server_id = server['id']
+                    break
+
+        return server_id
+        
+
+    def get_server_ip(self, server_id, tenant_id, network_name, network_type):
+	
+	server_get_url = ''.join([self.server_url, tenant_id, '/servers/', server_id])	
+	ip_resp = requests.get(server_get_url, headers=self.req_headers)
+	ip_resp_data = json.loads(ip_resp.text)
+	server_net_list = ip_resp_data['server']['addresses']
+
+        server_ip = None
+	
+	for net_name in server_net_list:
+            if net_name == network_name:
+                for net in server_net_list[network_name]:
+                    if net['OS-EXT-IPS:type'] == network_type:
+                        if net['addr'] is not None:
+                            server_ip = net['addr']
+                        break
+                
+            if server_ip is not None:
+                break
+        
+	return server_ip
+ 	
+if __name__ == '__main__':
+    compute = Compute()
+#    print compute.create_server("test4") 
+#    print compute.get_server_ip("cd12d8f9-1fc8-471a-87c2-d5f643eaf9a9", "bccc3685691a4205947dc6d7bc4e532b", "net10")
+    tenant_id = compute.get_tenant_id("admin")
+    server_id = compute.get_server_id("test3", tenant_id)
+    print server_id
+    print compute.get_server_ip(server_id, tenant_id, "net10")
+    
+
+
+
+
+         

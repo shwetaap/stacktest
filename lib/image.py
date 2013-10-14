@@ -1,5 +1,5 @@
 import requests
-import token
+import stacktoken
 import os
 import ConfigParser
 import json
@@ -15,7 +15,7 @@ class Image():
         self.config = ConfigParser.ConfigParser()
         self.conf_file = os.path.join(self.CONFIG_DIR, self.CONFIG_FILE)
         self.config.read(self.conf_file)
-        self.req_token = token.Token()
+        self.req_token = stacktoken.Token()
         self.token_id = self.req_token.create_token()
         self.req_headers = {'content-type': 'application/json'}
         self.req_headers.update({'X-Auth-Token': self.token_id})
@@ -36,5 +36,21 @@ class Image():
                     image_id = img['id']
                     break
 
-        return image_id        
+        return image_id
+
+    def get_image_file(self, img_location):
+        
+        if img_location is not None:
+            img = requests.get(img_location)
+            print img.status_code
+            print len(img.content)
+            print img
+            
+
+
+if __name__ == '__main__':
+    imgobj = Image()
+    imgobj.get_image_file("http://download.cirros-cloud.net/0.3.1/cirros-0.3.1-x86_64-disk.img")
+
+
     
