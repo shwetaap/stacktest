@@ -127,12 +127,19 @@ class Compute():
  	
 if __name__ == '__main__':
     compute = Compute()
-#    print compute.create_server("test4") 
+    print compute.create_server("test1", network_name="net11") 
 #    print compute.get_server_ip("cd12d8f9-1fc8-471a-87c2-d5f643eaf9a9", "bccc3685691a4205947dc6d7bc4e532b", "net10")
-    tenant_id = compute.get_tenant_id("admin")
-    server_id = compute.get_server_id("test3", tenant_id)
+"""    tenant_id = compute.get_tenant_id("admin")
+    server_id = compute.get_server_id("test5", tenant_id)
     print server_id
-    print compute.get_server_ip(server_id, tenant_id, "net10")
+    serverip = compute.get_server_ip(server_id, tenant_id, "net14", "fixed")
+    print serverip
+    netid = compute.netobj.get_network_id("nova")
+    print netid
+    portid = compute.netobj.get_port_id(server_id, serverip)
+    print portid
+    print compute.netobj.associate_floating_ip(portid, netid)
+"""    
     
 
 

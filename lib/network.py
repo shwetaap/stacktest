@@ -266,11 +266,13 @@ class Network():
 
 if __name__ == '__main__':
     network = Network()
+    print network.create_subnet(network_name="net14", subnet="10.10.14.0/24")
+    print network.add_interface_router(router_name="router1", network_name="net14", subnet="10.10.14.0/24")
 #    print network.check_router_gateway_exists("8ed40600-ebb4-438d-b793-e0015762991b")
-    network.get_port_id("62a3b517-592b-4148-b40f-e60fba52d9ae", "10.10.10.1")
+#    network.get_port_id("62a3b517-592b-4148-b40f-e60fba52d9ae", "10.10.10.1")
 """    #print "Netoerk Token ID"
     #print network.token_id
-#    print network.create_network(network_name="net11", public_net=True)
+    print network.create_network(network_name="net11", public_net=True)
 #    network.create_network(network_name="nova", public_net=True)
 #    network.create_subnet(network_name="nova", subnet="172.29.86.240/28", public_net=True, pool_start="172.29.86.244", pool_end="172.29.86.254")
 #    network.add_gateway_interface(network_name="nova", router_name="router1")

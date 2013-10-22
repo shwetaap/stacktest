@@ -170,7 +170,7 @@ class TestInstanceConnectivity(unittest.TestCase):
 
         cmd = "ping -c 5 " + second_server_ip
 	print first_server_float_ip, self.username, self.password
-        time.sleep(30)
+        time.sleep(60)
         self.ssh.connect(first_server_float_ip, username=self.username,
                          password=self.password)
         stdin, stdout, stderr = self.ssh.exec_command(cmd)
@@ -248,7 +248,7 @@ class TestInstanceConnectivity(unittest.TestCase):
                                                      "floating")
         
         cmd = "ping -c 5 " + second_server_ip
-        time.sleep(30)
+        time.sleep(60)
 	self.ssh.connect(first_server_float_ip, username=self.username,
                          password=self.password)
         stdin, stdout, stderr = self.ssh.exec_command(cmd)
